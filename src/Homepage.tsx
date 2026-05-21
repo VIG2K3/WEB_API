@@ -5,34 +5,11 @@ import logo from "./assets/TravelSmart_Logo.png";
 import TripDetail from "./TripDetail";
 import MyTrips from "./MyTrips";
 import SettingsProfile from "./SettingsProfile";
+import PenangExplorer from "./PenangExplorer";
+import { tripService } from "./services/tripService";
+import type { Trip } from "./types/trip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Trip {
-  _id: string;
-  city: string;
-  country: string;
-  dates: string;
-  startDate: string;
-  endDate: string;
-  image: string;
-  weather: {
-    temp: string;
-    condition: string;
-    humidity: string;
-    wind: string;
-    feelsLike: string;
-    icon: string;
-  };
-  attractions: {
-    name: string;
-    image: string;
-    distance: string;
-  }[];
-  notes: string;
-  preferences: string;
-  status: string;
-}
 
 interface Stat {
   label: string;
@@ -44,7 +21,6 @@ interface QuickAction {
   icon: string;
   label: string;
 }
-
 
 const QUICK_ACTIONS: QuickAction[] = [
   { icon: "➕", label: "New Trip" },
@@ -61,9 +37,12 @@ export default function Homepage() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [hoveredAction, setHoveredAction] = useState<string | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoadingWeather, setIsLoadingWeather] = useState<boolean>(false);
   const [selectedTrip, setSelectedTrip] = useState<string | null>(null);
   const [showMyTrips, setShowMyTrips] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [showPenangExplorer, setShowPenangExplorer] = useState<boolean>(false);
   const [stats, setStats] = useState<Stat[]>([
     { label: "Total Trips", value: 0, icon: "✈️" },
     { label: "Countries", value: 0, icon: "🌍" },
@@ -73,34 +52,17 @@ export default function Homepage() {
 
   const navItems: string[] = ["Homepage", "My Trips", "Penang Explorer", "Logout"];
 
-// ── Fetch trips from your Node.js API ──
   useEffect(() => {
-    // TODO: connect to your API
-    // fetch("/api/trips/upcoming")
-    //   .then((res) => res.json())
-    //   .then((data: Trip[]) => setTrips(data))
-    //   .catch((err) => console.error("Failed to fetch trips:", err));
-
-    // Mock data for testing — remove this when backend is ready
-    setTrips([{
-      _id: "1",
-      city: "George Town",
-      country: "Malaysia",
-      dates: "1 – 7 Jun 2025",
-      startDate: "2025-06-01",
-      endDate: "2025-06-07",
-      image: "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=600&q=80",
-      weather: { temp: "32°C", condition: "Sunny", humidity: "80%", wind: "10 km/h", feelsLike: "35°C", icon: "☀️" },
-      attractions: [
-        { name: "Penang Hill", image: "https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=80&q=60", distance: "5.2 km" },
-        { name: "George Town Heritage", image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=80&q=60", distance: "1.1 km" },
-        { name: "Kek Lok Si Temple", image: "https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=80&q=60", distance: "7.3 km" },
-],
-
-      notes: "Explore street art, try char kway teow, visit Penang Hill.",
-      preferences: "Food, Culture, Nature",
-      status: "upcoming",
-    }]);
+    const fetchTrips = async () => {
+      try {
+        // This gets trips with REAL weather from OpenWeatherMap
+        const upcomingTrips = await tripService.getUpcomingTripsWithWeather();
+        setTrips(upcomingTrips);
+      } catch (err) {
+        console.error("Failed to fetch trips:", err);
+      }
+    };
+    fetchTrips();
   }, []);
 
   // ── Fetch stats from your Node.js API ──
@@ -112,20 +74,38 @@ export default function Homepage() {
     //   .catch((err) => console.error("Failed to fetch stats:", err));
   }, []);
 
-// ── If My Trips is selected ──
-  if (showMyTrips) {
-    return <MyTrips onBack={() => setShowMyTrips(false)} />;
+  if (showSettings) {
+    return <SettingsProfile onBack={() => {
+      setShowSettings(false);
+      setActiveNav("Homepage");
+    }} />;
   }
 
-  // ── If a trip is selected, show TripDetail instead ──
+  if (showPenangExplorer) {
+    return <PenangExplorer onBack={() => {
+      setShowPenangExplorer(false);
+      setActiveNav("Homepage");
+    }} />;
+  }
+
+  if (showMyTrips) {
+    return <MyTrips onBack={() => {
+      setShowMyTrips(false);
+      setActiveNav("Homepage");
+    }} />;
+  }
+
   if (selectedTrip !== null) {
     const tripData = trips.find((t) => t._id === selectedTrip);
     if (!tripData) return null;
-    return <TripDetail trip={tripData} onBack={() => setSelectedTrip(null)} />;
-  }
-
-  if (showSettings) {
-  return <SettingsProfile onBack={() => setShowSettings(false)} />;
+    return <TripDetail 
+      trip={tripData} 
+      onBack={() => {
+        setSelectedTrip(null);
+        setActiveNav("Homepage");
+      }} 
+      source="home" 
+    />;
   }
 
   return (
@@ -144,18 +124,14 @@ export default function Homepage() {
           {navItems.slice(0, -1).map((item: string) => (
             <button
               key={item}
-              style={{
-                ...styles.navLink,
-                ...(activeNav === item ? styles.navLinkActive : {}),
-              }}
+              className="nav-button"
+              style={styles.navLink}
               onClick={() => {
                 setActiveNav(item);
                 if (item === "My Trips") setShowMyTrips(true);
-                if (item === "Penang Explorer") window.open("http://localhost:3000", "_blank");
+                if (item === "Penang Explorer") setShowPenangExplorer(true);
                 if (item === "Settings") setShowSettings(true); 
-
               }}
-              
             >
               {item}
             </button>
@@ -163,11 +139,18 @@ export default function Homepage() {
         </nav>
 
         <div style={styles.navRight}>
-          <button style={styles.askAiBtn}>
+          <button 
+            style={styles.askAiBtn}
+            onClick={() => console.log("Open AI assistant")}
+          >
             <span style={styles.sparkleIcon}>✦</span>
             Ask AI
           </button>
-          <button style={styles.iconBtn} title="Favourites">
+          <button 
+            style={styles.iconBtn} 
+            title="Favourites"
+            onClick={() => console.log("Show saved places")}
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
@@ -197,6 +180,7 @@ export default function Homepage() {
           {navItems.map((item: string) => (
             <button
               key={item}
+              className="mobile-nav-button"
               style={{
                 ...styles.mobileMenuLink,
                 ...(item === "Logout" ? styles.mobileMenuLogout : {}),
@@ -204,6 +188,13 @@ export default function Homepage() {
               onClick={() => {
                 setActiveNav(item);
                 setMenuOpen(false);
+                if (item === "My Trips") setShowMyTrips(true);
+                if (item === "Penang Explorer") setShowPenangExplorer(true);
+                if (item === "Settings") setShowSettings(true);
+                if (item === "Logout") {
+                  localStorage.removeItem('token');
+                  window.location.href = '/login';
+                }
               }}
             >
               {item}
@@ -218,7 +209,7 @@ export default function Homepage() {
         {/* Welcome Banner */}
         <section style={styles.welcomeBanner}>
           <div style={styles.welcomeText}>
-            <p style={styles.welcomeGreeting}>Good morning 👋</p>
+            <p style={styles.welcomeGreeting}>Good day 👋</p>
             <h1 style={styles.welcomeHeading}>
               Where to next,{" "}
               <span style={styles.welcomeHighlight}>Traveller?</span>
@@ -251,7 +242,15 @@ export default function Homepage() {
         <section style={styles.tripsSection}>
           <div style={styles.tripsSectionHeader}>
             <h2 style={styles.sectionTitle}>Upcoming Trips</h2>
-            <button style={styles.viewAllBtn}>View All →</button>
+            <button 
+              style={styles.viewAllBtn} 
+              onClick={() => {
+                setShowMyTrips(true);
+                setActiveNav("My Trips");
+              }}
+            >
+              View All →
+            </button>
           </div>
 
           <div style={styles.tripsGrid}>
@@ -302,6 +301,18 @@ export default function Homepage() {
                 }}
                 onMouseEnter={() => setHoveredAction(action.label)}
                 onMouseLeave={() => setHoveredAction(null)}
+                onClick={() => {
+                  if (action.label === "Penang Explorer") {
+                    setShowPenangExplorer(true);
+                    setActiveNav("Penang Explorer");
+                  } else if (action.label === "New Trip") {
+                    console.log("Create new trip");
+                  } else if (action.label === "Ask AI") {
+                    console.log("Open AI assistant");
+                  } else if (action.label === "Saved Places") {
+                    console.log("Show saved places");
+                  }
+                }}
               >
                 <span style={styles.actionIcon}>{action.icon}</span>
                 <span style={styles.actionLabel}>{action.label}</span>
@@ -316,6 +327,18 @@ export default function Homepage() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #f5f7fa; }
         button { cursor: pointer; border: none; background: none; font-family: inherit; }
+        
+        /* Nav button hover effect */
+        .nav-button:hover {
+          background: #eef4ff !important;
+          color: #3e84f6 !important;
+        }
+        
+        /* Mobile nav button hover effect */
+        .mobile-nav-button:hover {
+          background: #f5f7fa !important;
+        }
+        
         @keyframes fadeSlideUp {
           from { opacity: 0; transform: translateY(18px); }
           to { opacity: 1; transform: translateY(0); }
@@ -334,7 +357,6 @@ export default function Homepage() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-// Using CSSProperties type for full IntelliSense support in VS Code
 
 const styles: Record<string, CSSProperties> = {
   root: {
@@ -358,7 +380,6 @@ const styles: Record<string, CSSProperties> = {
   },
   navLeft: { display: "flex", alignItems: "center" },
   logoArea: { display: "flex", alignItems: "center", gap: 8 },
-
   logoTextTravel: {
     fontFamily: "'Syne', sans-serif",
     fontWeight: 800,
@@ -387,11 +408,6 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 500,
     color: "#555",
     transition: "all 0.15s",
-  },
-  navLinkActive: {
-    background: "#eef4ff",
-    color: "#3e84f6",
-    fontWeight: 600,
   },
   navRight: { display: "flex", alignItems: "center", gap: 8 },
   askAiBtn: {
@@ -458,7 +474,7 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: 20,
     padding: "56px 64px",
     minHeight: 220,
-    gap:40,
+    gap: 40,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",

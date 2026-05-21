@@ -1,47 +1,28 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
+import { tripService } from "./services/tripService";
+import { weatherService } from "./services/weatherServices"; // Fixed: was weatherServices (plural)
+import type { Trip } from "./types/trip";
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Trip {
-  _id: string;
-  city: string;
-  country: string;
-  dates: string;
-  startDate: string;
-  endDate: string;
-  image: string;
-  weather: {
-    temp: string;
-    condition: string;
-    humidity: string;
-    wind: string;
-    feelsLike: string;
-    icon: string;
-  };
-  attractions: {
-    name: string;
-    image: string;
-    distance: string;
-  }[];
-  notes: string;
-  preferences: string;
-  status: string;
-}
 
 type TabType = "Overview" | "Weather" | "Attractions" | "Notes";
 
 interface TripDetailProps {
   trip: Trip;
   onBack: () => void;
+  source?: 'home' | 'mytrips';
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function TripDetail({ trip, onBack }: TripDetailProps) {
+export default function TripDetail({ trip, onBack, source = "mytrips" }: TripDetailProps) {
   const [activeTab, setActiveTab] = useState<TabType>("Overview");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [showEditPanel, setShowEditPanel] = useState<boolean>(false);
+  const [refreshingWeather, setRefreshingWeather] = useState<boolean>(false);
+  const [currentWeather, setCurrentWeather] = useState(trip.weather);
 
   // Edit form state — initialised from the trip prop
   const [editDestination, setEditDestination] = useState<string>(`${trip.city}, ${trip.country}`);
@@ -58,6 +39,19 @@ export default function TripDetail({ trip, onBack }: TripDetailProps) {
     const startFmt = s.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
     const endFmt = e.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
     return `${startFmt} – ${endFmt}`;
+  };
+
+  const refreshWeather = async () => {
+    setRefreshingWeather(true);
+    try {
+      const newWeather = await weatherService.getCurrentWeather(trip.city, trip.country);
+      setCurrentWeather(newWeather);
+    } catch (error) {
+      console.error('Failed to refresh weather:', error);
+      alert('Failed to refresh weather. Please try again.');
+    } finally {
+      setRefreshingWeather(false);
+    }
   };
 
   return (
@@ -101,7 +95,7 @@ export default function TripDetail({ trip, onBack }: TripDetailProps) {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M19 12H5M12 5l-7 7 7 7" />
               </svg>
-              Back to My Trips
+              Back to {source === 'home' ? 'Homepage' : 'My Trips'}
             </button>
             <div style={styles.actionBtns}>
               <button style={styles.editBtn} onClick={() => setShowEditPanel(true)}>
@@ -163,26 +157,44 @@ export default function TripDetail({ trip, onBack }: TripDetailProps) {
             {activeTab === "Overview" && (
               <div style={styles.overviewGrid}>
                 <div style={styles.infoCard}>
-                  <h3 style={styles.cardTitle}>Weather Now</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={styles.cardTitle}>Weather Now</h3>
+                    <button 
+                      onClick={refreshWeather}
+                      disabled={refreshingWeather}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        background: '#eef4ff',
+                        color: '#3e84f6',
+                        border: 'none',
+                        cursor: refreshingWeather ? 'not-allowed' : 'pointer',
+                        opacity: refreshingWeather ? 0.6 : 1
+                      }}
+                    >
+                      {refreshingWeather ? '⟳ Loading...' : '⟳ Refresh'}
+                    </button>
+                  </div>
                   <div style={styles.weatherMain}>
-                    <span style={styles.weatherEmoji}>{trip.weather.icon}</span>
+                    <span style={styles.weatherEmoji}>{currentWeather.icon}</span>
                     <div>
-                      <div style={styles.weatherTemp}>{trip.weather.temp}</div>
-                      <div style={styles.weatherCond}>{trip.weather.condition}</div>
+                      <div style={styles.weatherTemp}>{currentWeather.temp}</div>
+                      <div style={styles.weatherCond}>{currentWeather.condition}</div>
                     </div>
                   </div>
                   <div style={styles.weatherDetails}>
                     <div style={styles.weatherRow}>
                       <span style={styles.weatherLabel}>Humidity</span>
-                      <span style={styles.weatherVal}>{trip.weather.humidity}</span>
+                      <span style={styles.weatherVal}>{currentWeather.humidity}</span>
                     </div>
                     <div style={styles.weatherRow}>
                       <span style={styles.weatherLabel}>Wind</span>
-                      <span style={styles.weatherVal}>{trip.weather.wind}</span>
+                      <span style={styles.weatherVal}>{currentWeather.wind}</span>
                     </div>
                     <div style={styles.weatherRow}>
                       <span style={styles.weatherLabel}>Feels like</span>
-                      <span style={styles.weatherVal}>{trip.weather.feelsLike}</span>
+                      <span style={styles.weatherVal}>{currentWeather.feelsLike}</span>
                     </div>
                   </div>
                 </div>
@@ -205,26 +217,44 @@ export default function TripDetail({ trip, onBack }: TripDetailProps) {
 
             {activeTab === "Weather" && (
               <div style={styles.infoCard}>
-                <h3 style={styles.cardTitle}>Weather Forecast</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={styles.cardTitle}>Weather Forecast</h3>
+                  <button 
+                    onClick={refreshWeather}
+                    disabled={refreshingWeather}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      background: '#eef4ff',
+                      color: '#3e84f6',
+                      border: 'none',
+                      cursor: refreshingWeather ? 'not-allowed' : 'pointer',
+                      opacity: refreshingWeather ? 0.6 : 1
+                    }}
+                  >
+                    {refreshingWeather ? '🔄 Loading...' : '🔄 Refresh'}
+                  </button>
+                </div>
                 <div style={styles.weatherMain}>
-                  <span style={styles.weatherEmoji}>{trip.weather.icon}</span>
+                  <span style={styles.weatherEmoji}>{currentWeather.icon}</span>
                   <div>
-                    <div style={styles.weatherTemp}>{trip.weather.temp}</div>
-                    <div style={styles.weatherCond}>{trip.weather.condition}</div>
+                    <div style={styles.weatherTemp}>{currentWeather.temp}</div>
+                    <div style={styles.weatherCond}>{currentWeather.condition}</div>
                   </div>
                 </div>
                 <div style={styles.weatherDetails}>
                   <div style={styles.weatherRow}>
                     <span style={styles.weatherLabel}>Humidity</span>
-                    <span style={styles.weatherVal}>{trip.weather.humidity}</span>
+                    <span style={styles.weatherVal}>{currentWeather.humidity}</span>
                   </div>
                   <div style={styles.weatherRow}>
                     <span style={styles.weatherLabel}>Wind</span>
-                    <span style={styles.weatherVal}>{trip.weather.wind}</span>
+                    <span style={styles.weatherVal}>{currentWeather.wind}</span>
                   </div>
                   <div style={styles.weatherRow}>
                     <span style={styles.weatherLabel}>Feels like</span>
-                    <span style={styles.weatherVal}>{trip.weather.feelsLike}</span>
+                    <span style={styles.weatherVal}>{currentWeather.feelsLike}</span>
                   </div>
                 </div>
               </div>
@@ -339,9 +369,26 @@ export default function TripDetail({ trip, onBack }: TripDetailProps) {
                 </button>
                 <button
                   style={styles.updateBtn}
-                  onClick={() => {
-                    // TODO: PUT /api/trips/:_id with updated data
-                    setShowEditPanel(false);
+                  onClick={async () => {
+                    try {
+                      // Parse destination into city and country
+                      const [city, country] = editDestination.split(',').map(s => s.trim());
+                      
+                      await tripService.updateTrip(trip._id, {
+                        city,
+                        country,
+                        startDate: editStartDate,
+                        endDate: editEndDate,
+                        notes: editNotes,
+                        preferences: editPreferences,
+                      });
+                      setShowEditPanel(false);
+                      // Optionally refresh the page or show success message
+                      window.location.reload(); // Simple refresh - you can improve this
+                    } catch (err) {
+                      console.error('Failed to update trip:', err);
+                      alert('Failed to update trip. Please try again.');
+                    }
                   }}
                 >
                   Update Trip
@@ -370,10 +417,15 @@ export default function TripDetail({ trip, onBack }: TripDetailProps) {
               </button>
               <button
                 style={styles.deleteConfirmBtn}
-                onClick={() => {
-                  // TODO: DELETE /api/trips/:_id
-                  setShowDeleteConfirm(false);
-                  onBack();
+                onClick={async () => {
+                  try {
+                    await tripService.deleteTrip(trip._id);
+                    setShowDeleteConfirm(false);
+                    onBack(); // Return to previous screen
+                  } catch (err) {
+                    console.error('Failed to delete trip:', err);
+                    alert('Failed to delete trip. Please try again.');
+                  }
                 }}
               >
                 Delete

@@ -1,30 +1,10 @@
 import { useState, useEffect } from "react";
 import type { CSSProperties } from "react";
 import TripDetail from "./TripDetail";
+import { tripService } from "./services/tripService";
+import type { Trip } from "./types/trip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Trip {
-  _id: string;
-  city: string;
-  country: string;
-  dates: string;
-  startDate: string;
-  endDate: string;
-  image: string;
-  weather: {
-    temp: string;
-    condition: string;
-    humidity: string;
-    wind: string;
-    feelsLike: string;
-    icon: string;
-  };
-  attractions: { name: string; image: string; distance: string }[];
-  notes: string;
-  preferences: string;
-  status: string;
-}
 
 interface MyTripsProps {
   onBack: () => void;
@@ -41,18 +21,20 @@ export default function MyTrips({ onBack }: MyTripsProps) {
 
   const filters = ["All", "Upcoming", "Ongoing", "Completed"];
 
-  useEffect(() => {
-    fetch("http://localhost:5000/api/trips")
-      .then((res) => res.json())
-      .then((data: Trip[]) => {
-        setTrips(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch trips:", err);
-        setLoading(false);
-      });
-  }, []);
+useEffect(() => {
+  const fetchTrips = async () => {
+    try {
+      setLoading(true);
+      const data = await tripService.getAllTrips();
+      setTrips(data);
+    } catch (err) {
+      console.error("Failed to fetch trips:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  fetchTrips();
+}, []);
 
   const filteredTrips = trips.filter((trip) => {
     if (activeFilter === "All") return true;
