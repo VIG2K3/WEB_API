@@ -146,6 +146,49 @@
 .search-box input::placeholder { color: var(--muted); }
 .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 16px; }
 
+.search-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1.5px solid var(--blue);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(62, 132, 246, 0.15);
+}
+
+.suggestion-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.suggestion-item:hover {
+  background: var(--blue-light);
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.suggestion-address {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
 /* ── CATEGORY TABS ────────────────────────────────────────────────────────── */
 .cat-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
 
@@ -333,7 +376,23 @@
   transition: all 0.2s;
 }
 .reset-view-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
-
+.locate-me-btn {
+  position: absolute;
+  top: 54px; right: 12px;
+  z-index: 999;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px; font-weight: 600;
+  color: var(--text-sub);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: all 0.2s;
+}
+.locate-me-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+.locate-me-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 /* ── MAP POPUPS ───────────────────────────────────────────────────────────── */
 .popup-title  { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
 .popup-type   { font-size: 11px; color: var(--blue); font-weight: 600; text-transform: uppercase; margin-bottom: 4px; }
@@ -352,6 +411,17 @@
   transition: background 0.2s;
 }
 .popup-route-btn:hover { background: var(--blue-dark); }
+
+.popup-addtrip-btn {
+  background: var(--green);
+  color: #fff;
+  border: none; border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px; font-family: 'DM Sans', sans-serif; font-weight: 600;
+  cursor: pointer; width: 100%; margin-top: 8px;
+  transition: background 0.2s;
+}
+.popup-addtrip-btn:hover { background: #16a34a; }
 
 /* ── TOAST ────────────────────────────────────────────────────────────────── */
 .toast {

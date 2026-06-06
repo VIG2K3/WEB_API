@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { MapContainer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { tripService } from './services/tripService';
+import type { Trip, Place, Attraction } from './types/trip';
+import AddTripModal from './components/AddTripModal';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './PenangExplorer.css';
@@ -38,6 +41,179 @@ const TRAVEL_MODES = [
   { key: 'drive',   label: 'Drive', emoji: '🚗' },
   { key: 'walk',    label: 'Walk',  emoji: '🚶' },
   { key: 'bicycle', label: 'Cycle', emoji: '🚴' },
+];
+
+// ── HARDCODED PENANG PLACES FOR LOCAL SEARCH SUGGESTIONS ──────────────────────
+const FAMOUS_PLACES_FRONTEND = {
+  tourism: [
+    { name: 'Penang War Museum',            address: 'Bukit Batu Maung, Bayan Lepas',           lat: 5.2872, lon: 100.2726 },
+    { name: 'Kek Lok Si Temple',            address: 'Air Itam, 11500 Penang',                  lat: 5.3997, lon: 100.2728 },
+    { name: 'Penang Hill (Bukit Bendera)',  address: 'Bukit Bendera, 11300 Penang',             lat: 5.4208, lon: 100.2698 },
+    { name: 'Penang Hill Habitat',          address: 'Bukit Bendera, 11300 Penang',             lat: 5.4215, lon: 100.2692 },
+    { name: 'Fort Cornwallis',              address: 'Lebuh Light, George Town',                lat: 5.4199, lon: 100.3401 },
+    { name: 'Cheong Fatt Tze Mansion',      address: '14 Leith Street, George Town',            lat: 5.4193, lon: 100.3318 },
+    { name: 'Penang Museum & Art Gallery',  address: '39 Farquhar Street, George Town',         lat: 5.4176, lon: 100.3364 },
+    { name: 'Khoo Kongsi',                  address: 'Cannon Square, George Town',              lat: 5.4146, lon: 100.3326 },
+    { name: 'Pinang Peranakan Mansion',     address: '29 Church Street, George Town',           lat: 5.4182, lon: 100.3369 },
+    { name: 'Armenian Street Murals',       address: 'Armenian Street, George Town',            lat: 5.4172, lon: 100.3347 },
+    { name: 'Clan Jetties (Chew Jetty)',    address: 'Pengkalan Weld, George Town',             lat: 5.4112, lon: 100.3392 },
+    { name: 'Penang Butterfly Farm',        address: 'Jalan Teluk Bahang, 11050 Penang',        lat: 5.4629, lon: 100.2106 },
+    { name: 'Penang National Park',         address: 'Teluk Bahang, 11050 Penang',              lat: 5.4699, lon: 100.2010 },
+    { name: '2nd Penang Bridge',            address: 'Sultan Abdul Halim Muadzam Shah Bridge',   lat: 5.2458, lon: 100.3500 },
+    { name: 'Botanical Garden',             address: 'Jalan Kebun Bunga, 10350 Penang',         lat: 5.4330, lon: 100.2930 },
+    { name: 'Entopia Butterfly Farm',       address: 'Jalan Teluk Bahang, 11050 Penang',        lat: 5.4625, lon: 100.2095 },
+    { name: 'Escape Theme Park',            address: '828 Jalan Teluk Bahang, 11050 Penang',    lat: 5.4600, lon: 100.2080 },
+    { name: 'Masjid Kapitan Keling',        address: 'Jalan Masjid Kapitan Keling, George Town',lat: 5.4165, lon: 100.3355 },
+    { name: 'Penang Bridge',                address: 'Lebuhraya Jelutong, 11600 Penang',        lat: 5.3525, lon: 100.3650 },
+    { name: 'Spice Garden',                 address: 'Jalan Teluk Bahang, 11050 Penang',        lat: 5.4610, lon: 100.2070 },
+    { name: 'Sri Mahamariamman Temple',     address: 'Jalan Masjid Kapitan Keling, George Town',lat: 5.4170, lon: 100.3360 },
+    { name: 'St George Church',             address: 'Lebuh Farquhar, George Town',             lat: 5.4190, lon: 100.3390 },
+    { name: 'Straits Quay',                 address: 'Persiaran Seri Tanjung, 10470 Penang',    lat: 5.4521, lon: 100.3058 },
+    { name: 'The Habitat Penang Hill',      address: 'Bukit Bendera, 11300 Penang',             lat: 5.4210, lon: 100.2690 },
+    { name: 'Time Tunnel Museum',           address: 'Jalan Kampung Benggali, George Town',     lat: 5.4215, lon: 100.3355 },
+    { name: 'Toys Museum',                  address: 'Jalan Ariffin, George Town',              lat: 5.4205, lon: 100.3345 },
+    { name: 'Upside Down Museum',           address: 'Jalan Sultan Ahmad Shah, George Town',    lat: 5.4230, lon: 100.3360 },
+    { name: 'War Museum',                   address: 'Bukit Batu Maung, Bayan Lepas',           lat: 5.2872, lon: 100.2726 },
+  ],
+  restaurant: [
+    { name: 'Gurney Drive Hawker Centre',      address: 'Persiaran Gurney, 10250 Penang',          lat: 5.4378, lon: 100.3103 },
+    { name: 'Penang Road Famous Cendol',       address: 'Jalan Penang, George Town',               lat: 5.4185, lon: 100.3328 },
+    { name: 'Lorong Selamat Char Kway Teow',   address: 'Lorong Selamat, George Town',             lat: 5.4234, lon: 100.3176 },
+    { name: 'Sri Ananda Bahwan',               address: '55 Jalan Penang, George Town',            lat: 5.4183, lon: 100.3319 },
+    { name: 'Hameediyah Restaurant',           address: '164A Campbell Street, George Town',       lat: 5.4193, lon: 100.3322 },
+    { name: 'Line Clear Nasi Kandar',          address: 'Jalan Penang, George Town',               lat: 5.4190, lon: 100.3315 },
+    { name: '5 coffee penang',                 address: 'Jalan Penang, George Town',               lat: 5.4180, lon: 100.3325 },
+    { name: 'Air Itam famous chicken beansprouts', address: 'Jalan Paya Terubong, Air Itam',      lat: 5.4000, lon: 100.2730 },
+    { name: 'Amanda Adriell Cafe',             address: 'Lebuh Kimberley, George Town',            lat: 5.4150, lon: 100.3290 },
+    { name: 'Auntie Gaik Lean Nyonya',         address: 'Jalan Nagor, George Town',                lat: 5.4200, lon: 100.3180 },
+    { name: 'Batu Ferringhi Night Market',     address: 'Jalan Batu Ferringhi, 11100 Penang',      lat: 5.4670, lon: 100.2485 },
+    { name: 'Bee Coffee',                      address: 'Lebuh Farquhar, George Town',             lat: 5.4195, lon: 100.3380 },
+    { name: 'Bee Hooi Kopitiam',               address: 'Jalan Kuala Kangsar, George Town',        lat: 5.4160, lon: 100.3310 },
+    { name: 'beijing tea house penang',        address: 'Lebuh Muntri, George Town',               lat: 5.4185, lon: 100.3320 },
+    { name: 'Boey Chong Kee Restaurant',       address: 'Jalan Penang, George Town',               lat: 5.4175, lon: 100.3330 },
+    { name: 'Cahaya Lestari penang',           address: 'Jalan Sultan Ahmad Shah, George Town',    lat: 5.4225, lon: 100.3365 },
+    { name: 'Chagee',                          address: 'Gurney Plaza, Persiaran Gurney',         lat: 5.4370, lon: 100.3110 },
+    { name: 'Char Koah Kek',                   address: 'Lebuh Kimberly, George Town',             lat: 5.4152, lon: 100.3292 },
+    { name: 'Chendul Teochew',                 address: 'Lebuh Keng Kwee, George Town',            lat: 5.4165, lon: 100.3305 },
+    { name: 'Chill Night Kopitiam',            address: 'Jalan Rangoon, George Town',              lat: 5.4250, lon: 100.3150 },
+    { name: 'Chulia Street Night Hawkers',     address: 'Jalan Chulia, George Town',               lat: 5.4175, lon: 100.3350 },
+    { name: 'coffee roaster',                  address: 'Lebuh Farquhar, George Town',             lat: 5.4198, lon: 100.3382 },
+    { name: 'Dessert Old Time Delight Shop',   address: 'Jalan Penang, George Town',               lat: 5.4182, lon: 100.3322 },
+    { name: 'Double Check penang',             address: 'Lebuh Kimberley, George Town',            lat: 5.4154, lon: 100.3294 },
+    { name: 'Dreamer Haven Art Cafe',          address: 'Jalan Nagor, George Town',                lat: 5.4205, lon: 100.3175 },
+    { name: 'Eden Seafood Village',            address: 'Jalan Tanjung Bungah, 11200 Penang',      lat: 5.4535, lon: 100.2965 },
+    { name: 'every fresh bar penang',          address: 'Lebuh Chulia, George Town',               lat: 5.4170, lon: 100.3350 },
+    { name: 'Fun Tea Garden penang',           address: 'Jalan Sultan Ahmad Shah, George Town',    lat: 5.4220, lon: 100.3360 },
+    { name: 'Jack fruit 4rm',                  address: 'Lebuh Kimberley, George Town',            lat: 5.4153, lon: 100.3293 },
+    { name: 'JW Golden Crisp',                 address: 'Lebuh Bishop, George Town',               lat: 5.4180, lon: 100.3370 },
+    { name: 'Kedai Kopi Bazaar',               address: 'Lebuh Campbell, George Town',             lat: 5.4178, lon: 100.3340 },
+    { name: 'khunthai restaurant penang',      address: 'Jalan Sri Bahari, George Town',           lat: 5.4240, lon: 100.3260 },
+    { name: 'kyodai ramen penang',             address: 'Lebuh Chulia, George Town',               lat: 5.4168, lon: 100.3352 },
+    { name: 'Leong Kee Tim Sum Restaurant',    address: 'Lebuh Kimberley, George Town',            lat: 5.4151, lon: 100.3291 },
+    { name: 'Lorong Abu Siti Hawker',          address: 'Lorong Abu Siti, George Town',            lat: 5.4220, lon: 100.3180 },
+    { name: 'Lorong Cafe',                     address: 'Lorong Abu Siti, George Town',            lat: 5.4218, lon: 100.3182 },
+    { name: 'Ma La Xiang',                     address: 'Jalan Penang, George Town',               lat: 5.4184, lon: 100.3324 },
+    { name: 'Mae Kong Mookata & Thai Cuisine', address: 'Jalan Sultan Ahmad Shah, George Town',    lat: 5.4222, lon: 100.3362 },
+    { name: 'Nasi Kandar Beratur',             address: 'Jalan Penang, George Town',               lat: 5.4186, lon: 100.3318 },
+    { name: 'New Lane Hawker Stalls',          address: 'Jalan Macalister, George Town',           lat: 5.4240, lon: 100.3200 },
+    { name: 'Nian Wei China Dumpling',         address: 'Lebuh Kimberley, George Town',            lat: 5.4152, lon: 100.3292 },
+    { name: 'Padang Brown Hawker Centre',      address: 'Jalan Brown, George Town',                lat: 5.4230, lon: 100.3220 },
+    { name: 'Pan Cake and Steam Rice Cake Stall', address: 'Lebuh Kimberley, George Town',        lat: 5.4153, lon: 100.3293 },
+    { name: 'Restaurant Kimberly Kuan Kee',    address: 'Lebuh Kimberley, George Town',            lat: 5.4154, lon: 100.3294 },
+    { name: 'Restoran Kapitan',                address: 'Jalan Penang, George Town',               lat: 5.4181, lon: 100.3321 },
+    { name: 'Restoran Traditional Home of Dessert', address: 'Jalan Penang, George Town',         lat: 5.4183, lon: 100.3323 },
+    { name: 'Sin Guat Keong Kopitiam',         address: 'Jalan Rangoon, George Town',              lat: 5.4255, lon: 100.3155 },
+    { name: 'Sup Hameed',                      address: 'Jalan Penang, George Town',               lat: 5.4187, lon: 100.3317 },
+    { name: 'Super Star Koay Teow Soup',       address: 'Lebuh Kimberley, George Town',            lat: 5.4155, lon: 100.3295 },
+    { name: 'Tai Tong Restaurant',             address: 'Lebuh Campbell, George Town',             lat: 5.4179, lon: 100.3341 },
+    { name: 'Tek Sen Restaurant',              address: 'Lebuh Carnarvon, George Town',            lat: 5.4145, lon: 100.3335 },
+    { name: 'The Caffeine Cartel',             address: 'Lebuh Muntri, George Town',               lat: 5.4186, lon: 100.3326 },
+    { name: 'Tho Yuen Dim sum',                address: 'Lebuh Campbell, George Town',             lat: 5.4177, lon: 100.3342 },
+    { name: 'Thóng Thai Fusion',               address: 'Jalan Sultan Ahmad Shah, George Town',    lat: 5.4223, lon: 100.3363 },
+    { name: 'Tina',                            address: 'Lebuh Cintra, George Town',               lat: 5.4147, lon: 100.3302 },
+    { name: 'Toh Soon Cafe',                   address: 'Lebuh Campbell, George Town',             lat: 5.4176, lon: 100.3343 },
+    { name: 'tuai pui',                        address: 'Lebuh Kimberley, George Town',            lat: 5.4156, lon: 100.3296 },
+    { name: 'Tuck Kee Bak Kwa',                address: 'Lebuh Kimberley, George Town',            lat: 5.4157, lon: 100.3297 },
+    { name: 'Urai Thai',                       address: 'Jalan Sultan Ahmad Shah, George Town',    lat: 5.4224, lon: 100.3364 },
+    { name: 'Wen Chang Hainan Chicken Rice',   address: 'Lebuh Campbell, George Town',             lat: 5.4175, lon: 100.3344 },
+    { name: 'Yong Pin Dim Sum',                address: 'Lebuh Kimberly, George Town',             lat: 5.4158, lon: 100.3298 },
+    { name: 'Yong Pin Restaurant',             address: 'Lebuh Kimberly, George Town',             lat: 5.4159, lon: 100.3299 },
+  ],
+  hotel: [
+    { name: 'Eastern & Oriental Hotel',      address: '10 Lebuh Farquhar, George Town',         lat: 5.4196, lon: 100.3388 },
+    { name: 'Hard Rock Hotel Penang',        address: 'Jalan Batu Ferringhi, 11100 Penang',      lat: 5.4662, lon: 100.2513 },
+    { name: 'Shangri-La Rasa Sayang Resort', address: 'Jalan Batu Ferringhi, 11100 Penang',      lat: 5.4675, lon: 100.2524 },
+    { name: 'Penang Marriott Hotel',         address: 'Persiaran Gurney, 10250 Penang',          lat: 5.4374, lon: 100.3108 },
+    { name: 'Hotel Jen Penang',              address: 'Magazine Road, George Town',              lat: 5.4241, lon: 100.3282 },
+    { name: '100 Cintra St',                 address: '100 Jalan Cintra, George Town',           lat: 5.4150, lon: 100.3300 },
+    { name: 'Ai Goh Hotel',                  address: 'Lebuh Chulia, George Town',               lat: 5.4180, lon: 100.3350 },
+    { name: 'Areca Hotel',                   address: 'Jalan Kek Chuan, George Town',            lat: 5.4155, lon: 100.3285 },
+    { name: 'Armenian Street Heritage Hotel',address: 'Armenian Street, George Town',            lat: 5.4175, lon: 100.3340 },
+    { name: 'ATTIC penang hotel',            address: 'Jalan Muntri, George Town',               lat: 5.4185, lon: 100.3320 },
+    { name: 'Bayview Hotel Georgetown',      address: 'Lebuh Farquhar, George Town',             lat: 5.4200, lon: 100.3370 },
+    { name: 'Campbell House',                address: 'Campbell Street, George Town',            lat: 5.4165, lon: 100.3310 },
+    { name: 'Carnarvon House',               address: 'Carnarvon Street, George Town',           lat: 5.4145, lon: 100.3330 },
+    { name: 'Chula heritage hotel',          address: 'Jalan Chulia, George Town',               lat: 5.4170, lon: 100.3345 },
+    { name: 'Cititel Penang',                address: 'Jalan Penang, George Town',               lat: 5.4180, lon: 100.3320 },
+    { name: 'Copthorne Orchid Hotel',        address: 'Lebuh Farquhar, George Town',             lat: 5.4190, lon: 100.3380 },
+    { name: 'Drippin\' dragon',              address: 'Lebuh Muntri, George Town',               lat: 5.4182, lon: 100.3325 },
+    { name: 'elephant house penang',         address: 'Lebuh Chulia, George Town',               lat: 5.4165, lon: 100.3355 },
+    { name: 'EZ Social Hostel',              address: 'Lebuh Kimberly, George Town',             lat: 5.4150, lon: 100.3290 },
+    { name: 'G Hotel Kelawai',               address: 'Persiaran Gurney, 10250 Penang',          lat: 5.4354, lon: 100.3093 },
+    { name: 'G Hotel Gurney',                address: 'Persiaran Gurney, 10250 Penang',          lat: 5.4370, lon: 100.3100 },
+    { name: 'Golden Sands Resort',           address: 'Jalan Batu Ferringhi, 11100 Penang',      lat: 5.4678, lon: 100.2485 },
+    { name: 'Grand Swiss',                   address: 'Lebuh Farquhar, George Town',             lat: 5.4195, lon: 100.3375 },
+    { name: 'Great Shanghai Guesthouse',     address: 'Lebuh Kimberley, George Town',            lat: 5.4152, lon: 100.3292 },
+    { name: 'Hang Chow Hotel',               address: 'Jalan Cintra, George Town',               lat: 5.4148, lon: 100.3305 },
+    { name: 'Heritage Sixteen',              address: 'Lebuh King, George Town',                 lat: 5.4168, lon: 100.3332 },
+    { name: 'Hotel Chulia Mansion',          address: 'Jalan Chulia, George Town',               lat: 5.4172, lon: 100.3348 },
+    { name: 'Hotel Oriental',                address: 'Lebuh Farquhar, George Town',             lat: 5.4198, lon: 100.3385 },
+    { name: 'House of Journey',              address: 'Lebuh Kimberley, George Town',            lat: 5.4153, lon: 100.3293 },
+    { name: 'Hutton Lodge',                  address: 'Jalan Muntri, George Town',               lat: 5.4183, lon: 100.3323 },
+    { name: 'Inn Residence 18',              address: 'Lebuh Chulia, George Town',               lat: 5.4173, lon: 100.3343 },
+    { name: 'Jim\'s Place penang',           address: 'Jalan Penang, George Town',               lat: 5.4178, lon: 100.3328 },
+    { name: 'Just INN Guesthouse',           address: 'Lebuh Chulia, George Town',               lat: 5.4168, lon: 100.3352 },
+    { name: 'Kangsar Inn 73',                address: 'Jalan Kangsar, George Town',              lat: 5.4142, lon: 100.3288 },
+    { name: 'Kimberley House',               address: 'Lebuh Kimberley, George Town',            lat: 5.4151, lon: 100.3291 },
+    { name: 'Kimberly Hotel',                address: 'Lebuh Kimberley, George Town',            lat: 5.4154, lon: 100.3294 },
+    { name: 'kooning hotel penang',          address: 'Jalan Penang, George Town',               lat: 5.4185, lon: 100.3315 },
+    { name: 'Le Dream Boutique',             address: 'Lebuh Cintra, George Town',               lat: 5.4145, lon: 100.3302 },
+    { name: 'Le Embassy Hotel',              address: 'Jalan Penang, George Town',               lat: 5.4181, lon: 100.3321 },
+    { name: 'Lone Pine Hotel',               address: 'Jalan Batu Ferringhi, 11100 Penang',      lat: 5.4665, lon: 100.2500 },
+    { name: 'Muntri Grove',                  address: 'Lebuh Muntri, George Town',               lat: 5.4184, lon: 100.3324 },
+    { name: 'Nam Keng',                      address: 'Lebuh Cintra, George Town',               lat: 5.4146, lon: 100.3303 },
+    { name: 'New Asia Heritage Hotel',       address: 'Lebuh Keng Kwee, George Town',            lat: 5.4160, lon: 100.3300 },
+    { name: 'Parkroyal Penang Resort',       address: 'Jalan Batu Ferringhi, 11100 Penang',      lat: 5.4672, lon: 100.2490 },
+    { name: 'Resthub (Self check-in)',       address: 'Lebuh Chulia, George Town',               lat: 5.4171, lon: 100.3347 },
+    { name: 'Rope Walk Guesthouse',          address: 'Lebuh Chulia, George Town',               lat: 5.4169, lon: 100.3351 },
+    { name: 'Sleep Box',                     address: 'Lebuh Chulia, George Town',               lat: 5.4167, lon: 100.3353 },
+    { name: 'Small Inn',                     address: 'Lebuh Kimberley, George Town',            lat: 5.4155, lon: 100.3295 },
+    { name: 'Sunway Hotel Georgetown',       address: 'Lebuh Kinta, George Town',                lat: 5.4150, lon: 100.3300 },
+    { name: 'Swing & pillow',                address: 'Lebuh Chulia, George Town',               lat: 5.4166, lon: 100.3354 },
+    { name: 'The Century Boutique Hotel',    address: 'Lebuh Farquhar, George Town',             lat: 5.4194, lon: 100.3378 },
+    { name: 'The Prestige Hotel',            address: 'Lebuh Farquhar, George Town',             lat: 5.4192, lon: 100.3382 },
+    { name: 'We Love Guesthouse penang',     address: 'Lebuh Kimberley, George Town',            lat: 5.4156, lon: 100.3296 },
+    { name: 'Wembley Hotel Penang',          address: 'Jalan Magazine, George Town',             lat: 5.4210, lon: 100.3250 },
+    { name: 'Yeng Keng Hotel',               address: 'Lebuh Penang, George Town',               lat: 5.4188, lon: 100.3330 },
+  ],
+  beach: [
+    { name: 'Batu Ferringhi Beach',   address: 'Jalan Batu Ferringhi, 11100 Penang',         lat: 5.4671, lon: 100.2481 },
+    { name: 'Tanjung Bungah Beach',   address: 'Jalan Tanjung Bungah, 11200 Penang',         lat: 5.4534, lon: 100.2960 },
+    { name: 'Monkey Beach',           address: 'Penang National Park, Teluk Bahang',         lat: 5.4731, lon: 100.2024 },
+    { name: 'Kerachut Beach',         address: 'Penang National Park, Teluk Bahang',         lat: 5.4742, lon: 100.1969 },
+    { name: 'Miami Beach',            address: 'Tanjung Bungah, 11200 Penang',               lat: 5.4550, lon: 100.2930 },
+    { name: 'Pantai Keracut',         address: 'Penang National Park, Teluk Bahang',         lat: 5.4740, lon: 100.1970 },
+    { name: 'Pantai Pasir Panjang',   address: 'Teluk Bahang, 11050 Penang',                 lat: 5.4715, lon: 100.2005 },
+    { name: 'Teluk Bahang Beach',     address: 'Teluk Bahang, 11050 Penang',                 lat: 5.4650, lon: 100.2150 },
+  ],
+};
+
+// Flat list of all frontend known places for geocode lookup
+const ALL_KNOWN_PLACES_FRONTEND = [
+  ...FAMOUS_PLACES_FRONTEND.tourism,
+  ...FAMOUS_PLACES_FRONTEND.restaurant,
+  ...FAMOUS_PLACES_FRONTEND.hotel,
+  ...FAMOUS_PLACES_FRONTEND.beach,
 ];
 
 // ── CUSTOM MARKER ICONS ───────────────────────────────────────────────────────
@@ -94,13 +270,25 @@ function FlyToPlace({
   const map = useMap();
   useEffect(() => {
     if (!place) return;
+    if (!place.lat || !place.lon) return;
+    
     map.flyTo([place.lat, place.lon], 16, { animate: true, duration: 1 });
+    
     const key = place.id || place.name;
     setTimeout(() => {
       const marker = markerRefs.current[key];
       if (marker) marker.openPopup();
-    }, 1100);
+    }, 1500);
   }, [place, map, markerRefs]);
+  return null;
+}
+
+function FlyToLocation({ location }: { location: LatLon | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!location) return;
+    map.flyTo([location.lat, location.lon], 14, { animate: true, duration: 1.2 });
+  }, [location, map]);
   return null;
 }
 
@@ -119,20 +307,6 @@ function MapStyleUpdater({ styleUrl, attribution }: { styleUrl: string; attribut
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 
-interface Place {
-  id: string;
-  name: string;
-  lat: number;
-  lon: number;
-  type?: string;
-  desc?: string;
-  address: string;
-  cuisine?: string;
-  opening_hours?: string;
-  phone?: string;
-  website?: string;
-}
-
 interface RouteInfo {
   distKm: number;
   durMin: number;
@@ -145,11 +319,13 @@ interface LatLon {
 
 interface PenangExplorerProps {
   onBack: () => void;
+  onTripAdded?: () => void;
+  focusPlace?: any;
 }
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 
-export default function PenangExplorer({ onBack }: PenangExplorerProps) {
+export default function PenangExplorer({ onBack, onTripAdded, focusPlace }: PenangExplorerProps) {
   const [places,        setPlaces]        = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [category,      setCategory]      = useState<string>('tourism');
@@ -167,35 +343,164 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
   const [routeCoords,    setRouteCoords]    = useState<[number, number][]>([]);
   const [routeInfo,      setRouteInfo]      = useState<RouteInfo | null>(null);
   const [routeEndpoints, setRouteEndpoints] = useState<{ from: LatLon; to: LatLon } | null>(null);
+  const [savingTrip,     setSavingTrip]     = useState<boolean>(false);
+  const [locating,       setLocating]       = useState<boolean>(false);
 
   const [userLocation, setUserLocation] = useState<LatLon | null>(null);
 
+  // Add Trip Modal state
+  const [isAddTripModalOpen,   setIsAddTripModalOpen]   = useState<boolean>(false);
+  const [selectedPlaceForTrip, setSelectedPlaceForTrip] = useState<Place | null>(null);
+
   const markerRefs  = useRef<Record<string, L.Marker>>({});
+  const watchIdRef  = useRef<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── INIT ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     fetchByCategory('tourism');
-    // Fixed location: INTI International College Penang, Bukit Jambul
-    setUserLocation({ lat: 5.3366, lon: 100.2832 });
+    requestUserLocation();
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
   }, []);
 
-  // ── SEARCH ────────────────────────────────────────────────────────────────
-  const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSearchQuery(val);
-    clearTimeout(debounceRef.current ?? undefined);
-    if (!val.trim()) return;
-    debounceRef.current = setTimeout(() => fetchSearch(val), 600);
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      clearTimeout(debounceRef.current ?? undefined);
-      fetchSearch(searchQuery);
+  // ── FOCUS PLACE HANDLER ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!focusPlace) return;
+    if (!focusPlace.lat || !focusPlace.lon) return;
+    
+    // Clear any existing route
+    setFromText('');
+    setToText('');
+    setRouteCoords([]);
+    setRouteInfo(null);
+    setRouteEndpoints(null);
+    
+    // Determine category from place type
+    const categoryMap: Record<string, string> = {
+      '🏛️ Tourist Attraction': 'tourism',
+      '🍜 Restaurant':          'restaurant',
+      '🏨 Hotel':               'hotel',
+      '🏖️ Beach':               'beach',
+      'Attraction':             'tourism',
+      'Restaurant':             'restaurant',
+      'Hotel':                  'hotel',
+      'Beach':                  'beach',
+    };
+    
+    let categoryToFetch = 'tourism';
+    if (focusPlace.type) {
+      categoryToFetch = categoryMap[focusPlace.type] || 'tourism';
+    } else if (focusPlace.category) {
+      categoryToFetch = categoryMap[focusPlace.category] || 'tourism';
     }
-  };
+    
+    setCategory(categoryToFetch);
+    
+    const fetchAndSelect = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get(`/api/search/places?category=${categoryToFetch}`);
+        const fetchedPlaces = res.data.places || [];
+        
+        // Merge fetched places with frontend known places
+        let allPlaces = [...fetchedPlaces];
+        
+        if (categoryToFetch === 'hotel') {
+          const frontendHotels = FAMOUS_PLACES_FRONTEND.hotel || [];
+          frontendHotels.forEach(hotel => {
+            const exists = allPlaces.some(p => p.name === hotel.name);
+            if (!exists) {
+              allPlaces.push({
+                id: `frontend_${hotel.name.replace(/\s/g, '_')}`,
+                name: hotel.name,
+                lat: hotel.lat,
+                lon: hotel.lon,
+                address: hotel.address,
+                type: 'hotel',
+                desc: '',
+              } as Place);
+            }
+          });
+        } else if (categoryToFetch === 'restaurant') {
+          const frontendRestaurants = FAMOUS_PLACES_FRONTEND.restaurant || [];
+          frontendRestaurants.forEach(restaurant => {
+            const exists = allPlaces.some(p => p.name === restaurant.name);
+            if (!exists) {
+              allPlaces.push({
+                id: `frontend_${restaurant.name.replace(/\s/g, '_')}`,
+                name: restaurant.name,
+                lat: restaurant.lat,
+                lon: restaurant.lon,
+                address: restaurant.address,
+                type: 'restaurant',
+                desc: '',
+              } as Place);
+            }
+          });
+        } else if (categoryToFetch === 'tourism') {
+          const frontendTourism = FAMOUS_PLACES_FRONTEND.tourism || [];
+          frontendTourism.forEach(attraction => {
+            const exists = allPlaces.some(p => p.name === attraction.name);
+            if (!exists) {
+              allPlaces.push({
+                id: `frontend_${attraction.name.replace(/\s/g, '_')}`,
+                name: attraction.name,
+                lat: attraction.lat,
+                lon: attraction.lon,
+                address: attraction.address,
+                type: 'tourism',
+                desc: '',
+              } as Place);
+            }
+          });
+        } else if (categoryToFetch === 'beach') {
+          const frontendBeaches = FAMOUS_PLACES_FRONTEND.beach || [];
+          frontendBeaches.forEach(beach => {
+            const exists = allPlaces.some(p => p.name === beach.name);
+            if (!exists) {
+              allPlaces.push({
+                id: `frontend_${beach.name.replace(/\s/g, '_')}`,
+                name: beach.name,
+                lat: beach.lat,
+                lon: beach.lon,
+                address: beach.address,
+                type: 'beach',
+                desc: '',
+              } as Place);
+            }
+          });
+        }
+        
+        setPlaces(allPlaces);
+        
+        // Find matching place in merged list
+        const matchedPlace = allPlaces.find(
+          (p: Place) => p.name === focusPlace.name || 
+                        p.name.toLowerCase().includes(focusPlace.name.toLowerCase()) ||
+                        focusPlace.name.toLowerCase().includes(p.name.toLowerCase())
+        );
+        
+        if (matchedPlace) {
+          setSelectedPlace(matchedPlace);
+        } else {
+          setSelectedPlace(focusPlace);
+        }
+      } catch (err) {
+        console.error('Failed to fetch places:', err);
+        setSelectedPlace(focusPlace);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAndSelect();
+  }, [focusPlace]);
 
+  // ── SEARCH ────────────────────────────────────────────────────────────────
   const fetchSearch = async (q: string) => {
     setLoading(true); setError(''); setPlaces([]);
     try {
@@ -206,6 +511,37 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
       setError(err.response?.data?.error || 'Search failed. Please try again.');
     } finally { setLoading(false); }
   };
+
+  // ── GEOLOCATION ───────────────────────────────────────────────────────────
+  const handlePositionSuccess = (position: GeolocationPosition) => {
+    setUserLocation({ lat: position.coords.latitude, lon: position.coords.longitude });
+    showToast('Location updated.');
+    setLocating(false);
+  };
+
+  const handlePositionError = (error: GeolocationPositionError) => {
+    const message =
+      error.code === 1 ? 'Location permission denied.' :
+      error.code === 2 ? 'Unable to determine location.' :
+      error.code === 3 ? 'Location request timed out.' :
+                        'Geolocation failed.';
+    showToast(message);
+    setLocating(false);
+  };
+
+  function requestUserLocation() {
+    if (!navigator.geolocation) {
+      showToast('Geolocation not supported by browser.');
+      return;
+    }
+    setLocating(true);
+    const id = navigator.geolocation.watchPosition(handlePositionSuccess, handlePositionError, {
+      enableHighAccuracy: true,
+      timeout:            15000,
+      maximumAge:         10000,
+    });
+    watchIdRef.current = id;
+  }
 
   const fetchByCategory = async (cat: string) => {
     setLoading(true); setError(''); setPlaces([]); setCategory(cat);
@@ -221,17 +557,32 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
   // ── ROUTING ───────────────────────────────────────────────────────────────
   const geocode = async (text: string): Promise<LatLon> => {
     if (text.toLowerCase() === 'my location' && userLocation) return userLocation;
+
+    // Check currently loaded places first
+    const loadedMatch =
+      places.find(p => p.name.toLowerCase() === text.toLowerCase()) ||
+      places.find(p => p.name.toLowerCase().includes(text.toLowerCase()));
+    if (loadedMatch) return { lat: loadedMatch.lat, lon: loadedMatch.lon };
+
+    // Check frontend known places list
+    const knownMatch =
+      ALL_KNOWN_PLACES_FRONTEND.find(p => p.name.toLowerCase() === text.toLowerCase()) ||
+      ALL_KNOWN_PLACES_FRONTEND.find(p => p.name.toLowerCase().includes(text.toLowerCase()));
+    if (knownMatch) return { lat: knownMatch.lat, lon: knownMatch.lon };
+
+    // Try backend geocode endpoint
     try {
       const res = await axios.get(`/api/search/geocode?q=${encodeURIComponent(text)}`);
       return { lat: res.data.lat, lon: res.data.lon };
     } catch {
+      // Last resort: Geoapify direct
       const res = await axios.get('https://api.geoapify.com/v1/geocode/search', {
         params: {
           text:   text + ' Penang Malaysia',
           lang:   'en',
           limit:  1,
           format: 'json',
-          filter: 'rect:100.1594,5.1956,100.5049,5.5354',
+          bias:   'proximity:100.3003,5.3521',
           apiKey: GEOCODING_KEY,
         },
       });
@@ -243,23 +594,38 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
 
   const callRoutingAPI = async (
     fromLat: number, fromLon: number,
-    toLat: number,   toLon: number,
-    mode: string,
+    toLat:   number, toLon:   number,
+    mode:    string,
   ) => {
     const geoapifyMode = ({ drive: 'drive', walk: 'walk', bicycle: 'bicycle' } as Record<string, string>)[mode] || 'drive';
-    const res = await axios.get('https://api.geoapify.com/v1/routing', {
-      params: {
-        waypoints: `${fromLat},${fromLon}|${toLat},${toLon}`,
-        mode:      geoapifyMode,
-        details:   'instruction_details',
-        format:    'geojson',
-        apiKey:    ROUTING_KEY,
-      },
-      timeout: 10000,
-    });
 
-    const features = res.data.features;
-    if (!features || !features.length) throw new Error('No route found');
+    const attempt = async (m: string) => {
+      const res = await axios.get('https://api.geoapify.com/v1/routing', {
+        params: {
+          waypoints: `${fromLat},${fromLon}|${toLat},${toLon}`,
+          mode:      m,
+          details:   'instruction_details',
+          format:    'geojson',
+          apiKey:    ROUTING_KEY,
+        },
+        timeout: 10000,
+      });
+      const features = res.data.features;
+      if (!features || !features.length) throw new Error('No route found');
+      return features;
+    };
+
+    let features;
+    try {
+      features = await attempt(geoapifyMode);
+    } catch {
+      if (geoapifyMode !== 'drive') {
+        showToast(`No ${geoapifyMode} route available — showing drive route instead.`);
+        features = await attempt('drive');
+      } else {
+        throw new Error('No route found');
+      }
+    }
 
     const route  = features[0];
     const props  = route.properties;
@@ -278,7 +644,8 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
 
   const getRoute = async () => {
     if (!fromText.trim() || !toText.trim()) {
-      showToast('Please enter both starting point and destination.'); return;
+      showToast('Please enter both starting point and destination.');
+      return;
     }
     try {
       showToast('Finding route…');
@@ -299,7 +666,11 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
     if (userLocation) {
       setFromText('My Location');
       try {
-        const result = await callRoutingAPI(userLocation.lat, userLocation.lon, place.lat, place.lon, travelMode);
+        const result = await callRoutingAPI(
+          userLocation.lat, userLocation.lon,
+          place.lat, place.lon,
+          travelMode,
+        );
         setRouteCoords(result.coordinates);
         setRouteInfo({ distKm: result.distKm, durMin: result.durMin });
         setRouteEndpoints({ from: userLocation, to: place });
@@ -316,7 +687,84 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
     setRouteCoords([]); setRouteInfo(null); setRouteEndpoints(null);
   };
 
-  // ── RESET ALL ─────────────────────────────────────────────────────────────
+  // ── TRIPS ─────────────────────────────────────────────────────────────────
+  const findNearbyAttractions = (place: Place): Attraction[] => {
+    const others = places
+      .filter(p => p.id !== place.id && p.lat && p.lon)
+      .map(p => ({
+        place,
+        distance: Math.hypot(p.lat - place.lat, p.lon - place.lon) * 111,
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 6)
+      .map(({ place, distance }) => ({
+        name:     place.name,
+        image:    'https://placehold.co/120x90?text=Nearby',
+        distance: `${Math.round(distance)} km`,
+      }));
+
+    return others.length
+      ? others
+      : [{ name: 'Explore nearby places', image: 'https://placehold.co/120x90?text=Explore', distance: 'Nearby' }];
+  };
+
+  const makeTripFromPlace = (place: Place): Omit<Trip, '_id'> => ({
+    destination: place.name,
+    country:     'Penang, Malaysia',
+    dates:       'Flexible dates',
+    startDate:   '',
+    endDate:     '',
+    image:       'https://placehold.co/640x480?text=Penang+Trip',
+    address:     place.address || '',
+    description: place.desc    || '',
+    type:        place.type    || '',
+    lat:         place.lat,
+    lon:         place.lon,
+    weather: { temp: 'N/A', condition: 'Planned', humidity: '', wind: '', feelsLike: '', icon: '📍' },
+    attractions: findNearbyAttractions(place),
+    notes:       `Saved from Penang Explorer: ${place.name}`,
+    preferences: '',
+    status:      'upcoming',
+  });
+
+  const addTrip = (place: Place) => {
+    setSelectedPlaceForTrip(place);
+    setIsAddTripModalOpen(true);
+  };
+
+  const handleAddTripSubmit = async (tripData: Omit<Trip, '_id'>) => {
+    if (!selectedPlaceForTrip) return;
+    const placeTrip = makeTripFromPlace(selectedPlaceForTrip);
+    const payload: Omit<Trip, '_id'> = {
+      ...placeTrip,
+      ...tripData,
+      address:     selectedPlaceForTrip.address || placeTrip.address,
+      description: selectedPlaceForTrip.desc    || placeTrip.description,
+      type:        selectedPlaceForTrip.type     || placeTrip.type,
+      lat:         selectedPlaceForTrip.lat,
+      lon:         selectedPlaceForTrip.lon,
+      attractions: findNearbyAttractions(selectedPlaceForTrip),
+      dates:       tripData.startDate && tripData.endDate
+                     ? `${tripData.startDate} to ${tripData.endDate}`
+                     : placeTrip.dates,
+      status:      tripData.status || placeTrip.status,
+    };
+    setSavingTrip(true);
+    try {
+      await tripService.createTrip(payload);
+      showToast('Trip saved to My Trips! 🎉');
+      setIsAddTripModalOpen(false);
+      setSelectedPlaceForTrip(null);
+      onTripAdded?.();
+    } catch (err) {
+      console.error('Failed to save trip:', err);
+      showToast('Unable to save trip. Please try again.');
+    } finally {
+      setSavingTrip(false);
+    }
+  };
+
+  // ── RESET ─────────────────────────────────────────────────────────────────
   const handleRefresh = () => {
     setSearchQuery('');
     setPlaces([]);
@@ -348,14 +796,11 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
       {/* HEADER */}
       <header className="header">
         <div className="logo">
-          <button
-            onClick={onBack}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              fontSize: 13, fontWeight: 600, color: '#555',
-              background: 'none', border: 'none', cursor: 'pointer', marginRight: 12,
-            }}
-          >
+          <button onClick={onBack} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontSize: 13, fontWeight: 600, color: '#555',
+            background: 'none', border: 'none', cursor: 'pointer', marginRight: 12,
+          }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M19 12H5M12 5l-7 7 7 7" />
             </svg>
@@ -364,11 +809,10 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
           <div className="logo-icon">🗺️</div>
           <div className="logo-text">Penang <span>Explorer</span></div>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="style-switcher">
-            <button className={`style-btn ${mapStyle === 'street'    ? 'active' : ''}`} onClick={() => setMapStyle('street')}>🗺️ Street</button>
-            <button className={`style-btn ${mapStyle === 'dark'      ? 'active' : ''}`} onClick={() => setMapStyle('dark')}>🌙 Dark</button>
+            <button className={`style-btn ${mapStyle === 'street' ? 'active' : ''}`} onClick={() => setMapStyle('street')}>🗺️ Street</button>
+            <button className={`style-btn ${mapStyle === 'dark' ? 'active' : ''}`} onClick={() => setMapStyle('dark')}>🌙 Dark</button>
             <button className={`style-btn ${mapStyle === 'satellite' ? 'active' : ''}`} onClick={() => setMapStyle('satellite')}>🛰️ Satellite</button>
           </div>
           <div className="header-badge">📍 Penang Island & Mainland</div>
@@ -379,19 +823,6 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
         {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-inner">
-
-            <div className="section-label">Search Places</div>
-            <div className="search-box">
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                placeholder="e.g. Penang Hill, Char Kway Teow…"
-                value={searchQuery}
-                onChange={handleSearchInput}
-                onKeyDown={handleSearchKeyDown}
-              />
-            </div>
-
             <div className="cat-tabs">
               {CATEGORIES.map(cat => (
                 <button
@@ -407,31 +838,22 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
             {/* ROUTE SECTION */}
             <div className="route-section">
               <div className="section-label" style={{ color: '#0f766e', marginBottom: 12 }}>🧭 Get Directions</div>
-
               <div className="route-input">
                 <div className="route-dot start" />
-                <input type="text" placeholder="Starting point (or 'My Location')"
-                  value={fromText} onChange={e => setFromText(e.target.value)} />
+                <input type="text" placeholder="Starting point (or 'My Location')" value={fromText} onChange={e => setFromText(e.target.value)} />
               </div>
-
               <div className="route-input">
                 <div className="route-dot end" />
-                <input type="text" placeholder="Destination"
-                  value={toText} onChange={e => setToText(e.target.value)} />
+                <input type="text" placeholder="Destination" value={toText} onChange={e => { setToText(e.target.value); if (e.target.value.trim()) fetchSearch(e.target.value); }} />
               </div>
-
               <div className="travel-mode">
                 {TRAVEL_MODES.map(m => (
-                  <button key={m.key}
-                    className={`mode-btn ${travelMode === m.key ? 'active' : ''}`}
-                    onClick={() => setTravelMode(m.key)}>
+                  <button key={m.key} className={`mode-btn ${travelMode === m.key ? 'active' : ''}`} onClick={() => setTravelMode(m.key)}>
                     {m.emoji}<span>{m.label}</span>
                   </button>
                 ))}
               </div>
-
               <button className="route-btn" onClick={getRoute}>Get Route</button>
-
               {routeInfo && (
                 <>
                   <div className="route-info">
@@ -456,48 +878,33 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
             )}
 
             {!loading && places.map((place, i) => (
-              <div
-                key={place.id || i}
-                className={`place-card ${selectedPlace?.id === place.id ? 'selected' : ''}`}
-                onClick={() => setSelectedPlace(place)}
-              >
+              <div key={place.id || i} className={`place-card ${selectedPlace?.id === place.id ? 'selected' : ''}`} onClick={() => setSelectedPlace(place)}>
                 <div className="place-type">{place.type || category}</div>
                 <div className="place-name">{place.name}</div>
                 {place.desc && <div className="place-desc">"{place.desc}"</div>}
                 <div className="place-addr">📍 {place.address}</div>
-                {place.cuisine      && <div className="place-tag">🍽️ {place.cuisine}</div>}
+                {place.cuisine && <div className="place-tag">🍽️ {place.cuisine}</div>}
                 {place.opening_hours && <div className="place-tag">🕐 {place.opening_hours}</div>}
                 <div className="card-actions">
-                  <button className="card-btn btn-route"
-                    onClick={e => { e.stopPropagation(); routeToPlace(place); }}>
-                    🧭 Route
-                  </button>
+                  <button className="card-btn btn-route" onClick={e => { e.stopPropagation(); routeToPlace(place); }}>🧭 Route</button>
                 </div>
               </div>
             ))}
-
           </div>
         </aside>
 
         {/* MAP */}
         <div className="map-wrapper">
-          <button className="reset-view-btn" onClick={handleRefresh} title="Reset everything">
-            🔄 Refresh
+          <button className="reset-view-btn" onClick={handleRefresh} title="Reset everything">🔄 Refresh</button>
+          <button className="locate-me-btn" onClick={requestUserLocation} disabled={locating} title="Locate me">
+            {locating ? '📍 Locating…' : '📍 Locate Me'}
           </button>
 
-          <MapContainer
-            center={PENANG_CENTER}
-            zoom={12}
-            style={{ height: '100%', width: '100%' }}
-            maxBounds={PENANG_BOUNDS}
-            maxBoundsViscosity={0.8}
-          >
-            <MapStyleUpdater
-              styleUrl={(MAP_STYLES as Record<string, string>)[mapStyle]}
-              attribution={(MAP_ATTRIBUTIONS as Record<string, string>)[mapStyle]}
-            />
+          <MapContainer center={PENANG_CENTER} zoom={12} style={{ height: '100%', width: '100%' }} maxBounds={PENANG_BOUNDS} maxBoundsViscosity={0.8}>
+            <MapStyleUpdater styleUrl={(MAP_STYLES as Record<string, string>)[mapStyle]} attribution={(MAP_ATTRIBUTIONS as Record<string, string>)[mapStyle]} />
             <FitBounds places={places} />
             <FlyToPlace place={selectedPlace} markerRefs={markerRefs} />
+            <FlyToLocation location={userLocation} />
             <ResetView trigger={resetView} />
 
             {userLocation && (
@@ -518,24 +925,16 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
                 <Popup>
                   <div className="popup-title">{place.name}</div>
                   <div className="popup-type">{place.type || category}</div>
-                  {place.desc    && <div className="popup-desc">"{place.desc}"</div>}
+                  {place.desc && <div className="popup-desc">"{place.desc}"</div>}
                   <div className="popup-addr">📍 {place.address}</div>
-                  {place.phone   && <div className="popup-detail">📞 {place.phone}</div>}
-                  {place.website && (
-                    <div className="popup-detail">
-                      🌐 <a href={place.website} target="_blank" rel="noreferrer">Website</a>
-                    </div>
-                  )}
-                  <button className="popup-route-btn" onClick={() => routeToPlace(place)}>
-                    🧭 Get Directions
-                  </button>
+                  {place.phone && <div className="popup-detail">📞 {place.phone}</div>}
+                  <button className="popup-route-btn" onClick={e => { e.stopPropagation(); routeToPlace(place); }}>🧭 Get Directions</button>
+                  <button className="popup-addtrip-btn" onClick={e => { e.stopPropagation(); addTrip(place); }} disabled={savingTrip}>➕ Add Trip</button>
                 </Popup>
               </Marker>
             ))}
 
-            {routeCoords.length > 0 && (
-              <Polyline positions={routeCoords} color="#0d9488" weight={5} opacity={0.85} />
-            )}
+            {routeCoords.length > 0 && <Polyline positions={routeCoords} color="#0d9488" weight={5} opacity={0.85} />}
 
             {routeEndpoints && (
               <>
@@ -552,6 +951,15 @@ export default function PenangExplorer({ onBack }: PenangExplorerProps) {
       </div>
 
       {toast && <div className="toast show">{toast}</div>}
+
+      {isAddTripModalOpen && selectedPlaceForTrip && (
+        <AddTripModal
+          place={selectedPlaceForTrip}
+          onClose={() => { setIsAddTripModalOpen(false); setSelectedPlaceForTrip(null); }}
+          onSubmit={handleAddTripSubmit}
+          loading={savingTrip}
+        />
+      )}
     </div>
   );
 }

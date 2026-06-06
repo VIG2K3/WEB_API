@@ -5,6 +5,11 @@ const router = express.Router();
 
 const PLACES_API_KEY    = process.env.PLACES_API_KEY;
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
+const hasPlacesKey     = Boolean(PLACES_API_KEY);
+const hasGeocodingKey  = Boolean(GEOCODING_API_KEY);
+
+if (!hasPlacesKey) console.warn('PLACES_API_KEY missing; live Geoapify place search will be disabled.');
+if (!hasGeocodingKey) console.warn('GEOCODING_API_KEY missing; live Geoapify geocoding will be disabled.');
 
 const PENANG_RECT = '100.1594,5.1956,100.5049,5.5354';
 const PENANG_LAT  = 5.4164;
@@ -125,15 +130,15 @@ router.get('/places', async (req, res) => {
 
       if (localResults.length > 0) {
         places = localResults;
-      } else {
-        // Fallback to Geoapify Geocoding
+      } else if (hasGeocodingKey) {
+        // Fallback to Geoapify Geocoding — bias instead of hard rect filter
         const response = await axios.get('https://api.geoapify.com/v1/geocode/search', {
           params: {
             text:   q + ' Penang Malaysia',
             lang:   'en',
             limit:  15,
             format: 'json',
-            filter: `rect:${PENANG_RECT}`,
+            bias:   `proximity:${PENANG_LON},${PENANG_LAT}`,  // ← soft bias, not hard filter
             apiKey: GEOCODING_API_KEY,
           },
           timeout: 8000,
@@ -148,6 +153,8 @@ router.get('/places', async (req, res) => {
           type:    '📍 Place',
           desc:    '',
         }));
+      } else {
+        places = [];
       }
 
     } else {
@@ -157,7 +164,7 @@ router.get('/places', async (req, res) => {
       let livePlaces = [];
       try {
         const categories = CATEGORY_MAP[category];
-        if (categories) {
+        if (categories && hasPlacesKey) {
           const response = await axios.get('https://api.geoapify.com/v2/places', {
             params: {
               categories: categories,
@@ -221,18 +228,28 @@ router.get('/geocode', async (req, res) => {
       ...FAMOUS_PLACES.hotel,
       ...FAMOUS_PLACES.beach,
     ];
-    const found = allFamous.find(p => p.name.toLowerCase().includes(query));
+
+    // Exact match first, then partial — more reliable than partial-only
+    const found =
+      allFamous.find(p => p.name.toLowerCase() === query) ||
+      allFamous.find(p => p.name.toLowerCase().includes(query));
+
     if (found) {
       return res.json({ success: true, lat: found.lat, lon: found.lon, name: found.name });
     }
 
+    if (!hasGeocodingKey) {
+      return res.status(404).json({ error: 'Location not found in Penang' });
+    }
+
+    // Fallback to Geoapify — bias instead of hard rect filter
     const response = await axios.get('https://api.geoapify.com/v1/geocode/search', {
       params: {
         text:   q + ' Penang Malaysia',
         lang:   'en',
         limit:  1,
         format: 'json',
-        filter: `rect:${PENANG_RECT}`,
+        bias:   `proximity:${PENANG_LON},${PENANG_LAT}`,  // ← soft bias, not hard filter
         apiKey: GEOCODING_API_KEY,
       },
       timeout: 8000,
